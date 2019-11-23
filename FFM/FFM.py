@@ -1,21 +1,23 @@
 # coding:utf-8
 import os
 import sys
+
 curPath = os.path.abspath(os.path.dirname(__file__))
 rootPath = os.path.split(curPath)[0]
 sys.path.append(rootPath)
 import tensorflow as tf
-import numpy as np
 from FFM.utilities import *
-import math
 import pandas as pd
 import logging
-logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s',level=logging.INFO)
+
+logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
+
 
 class FFM(object):
     """
     Field-aware Factorization Machine
     """
+
     def __init__(self, config):
         """
         :param config: configuration of hyperparameters
@@ -35,7 +37,7 @@ class FFM(object):
 
     def add_placeholders(self):
         self.X = tf.placeholder('float32', [self.batch_size, self.p])
-        self.y = tf.placeholder('int64', [None,])
+        self.y = tf.placeholder('int64', [None, ])
         self.keep_prob = tf.placeholder('float32')
 
     def inference(self):
@@ -47,7 +49,7 @@ class FFM(object):
             b = tf.get_variable('bias', shape=[2],
                                 initializer=tf.zeros_initializer())
             w1 = tf.get_variable('w1', shape=[self.p, 2],
-                                 initializer=tf.truncated_normal_initializer(mean=0,stddev=1e-2))
+                                 initializer=tf.truncated_normal_initializer(mean=0, stddev=1e-2))
             # shape of [None, 2]
             self.linear_terms = tf.add(tf.matmul(self.X, w1), b)
 
@@ -58,24 +60,24 @@ class FFM(object):
             self.field_aware_interaction_terms = tf.constant(0, dtype='float32')
             # build dict to find f, key of feature,value of field
             for i in range(self.p):
-                for j in range(i+1,self.p):
+                for j in range(i + 1, self.p):
                     self.field_aware_interaction_terms += tf.multiply(
-                        tf.reduce_sum(tf.multiply(v[i,self.feature2field[i]], v[j,self.feature2field[j]])),
-                        tf.multiply(self.X[:,i], self.X[:,j])
+                        tf.reduce_sum(tf.multiply(v[i, self.feature2field[j]], v[j, self.feature2field[i]])),
+                        tf.multiply(self.X[:, i], self.X[:, j])
                     )
         # shape of [None, 2]
         self.y_out = tf.add(self.linear_terms, self.field_aware_interaction_terms)
         self.y_out_prob = tf.nn.softmax(self.y_out)
 
     def add_loss(self):
-            cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.y, logits=self.y_out)
-            mean_loss = tf.reduce_mean(cross_entropy)
-            self.loss = mean_loss
-            tf.summary.scalar('loss', self.loss)
+        cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.y, logits=self.y_out)
+        mean_loss = tf.reduce_mean(cross_entropy)
+        self.loss = mean_loss
+        tf.summary.scalar('loss', self.loss)
 
     def add_accuracy(self):
         # accuracy
-        self.correct_prediction = tf.equal(tf.cast(tf.argmax(model.y_out,1), tf.int64), model.y)
+        self.correct_prediction = tf.equal(tf.cast(tf.argmax(model.y_out, 1), tf.int64), model.y)
         self.accuracy = tf.reduce_mean(tf.cast(self.correct_prediction, tf.float32))
         # add summary to accuracy
         tf.summary.scalar('accuracy', self.accuracy)
@@ -97,6 +99,7 @@ class FFM(object):
         self.add_accuracy()
         self.train()
 
+
 def check_restore_parameters(sess, saver):
     """ Restore the previously trained parameters if there are any. """
     ckpt = tf.train.get_checkpoint_state("checkpoints")
@@ -105,6 +108,7 @@ def check_restore_parameters(sess, saver):
         saver.restore(sess, ckpt.model_checkpoint_path)
     else:
         logging.info("Initializing fresh parameters for the my Factorization Machine")
+
 
 def train_model(sess, model, epochs=10, print_every=500):
     """training model"""
@@ -122,19 +126,19 @@ def train_model(sess, model, epochs=10, print_every=500):
             batch_X = []
             batch_y = []
             for i in range(actual_batch_size):
-                sample = data.iloc[i,:]
+                sample = data.iloc[i, :]
                 array = one_hot_representation(sample, fields_train_dict, train_array_length)
                 batch_X.append(array[:-2])
                 batch_y.append(array[-1])
             batch_X = np.array(batch_X)
             batch_y = np.array(batch_y)
             # create a feed dictionary for this batch
-            feed_dict = {model.X: batch_X, model.y: batch_y, model.keep_prob:1}
-            loss, accuracy,  summary, global_step, _ = sess.run([model.loss, model.accuracy,
-                                                                 merged,model.global_step,
-                                                                 model.train_op], feed_dict=feed_dict)
+            feed_dict = {model.X: batch_X, model.y: batch_y, model.keep_prob: 1}
+            loss, accuracy, summary, global_step, _ = sess.run([model.loss, model.accuracy,
+                                                                merged, model.global_step,
+                                                                model.train_op], feed_dict=feed_dict)
             # aggregate performance stats
-            losses.append(loss*actual_batch_size)
+            losses.append(loss * actual_batch_size)
 
             num_samples += actual_batch_size
             # Record summaries and train.csv-set accuracy
@@ -145,12 +149,11 @@ def train_model(sess, model, epochs=10, print_every=500):
                              .format(global_step, loss, accuracy))
                 saver.save(sess, "checkpoints/model", global_step=global_step)
         # print loss of one epoch
-        total_loss = np.sum(losses)/num_samples
-        print("Epoch {1}, Overall loss = {0:.3g}".format(total_loss, e+1))
+        total_loss = np.sum(losses) / num_samples
+        print("Epoch {1}, Overall loss = {0:.3g}".format(total_loss, e + 1))
 
 
-
-def test_model(sess, model, print_every = 50):
+def test_model(sess, model, print_every=50):
     """training model"""
     # get testing data, iterable
     test_data = pd.read_csv('/home/johnso/PycharmProjects/News_recommendation/CTR_prediction/avazu_CTR/test.csv',
@@ -161,22 +164,22 @@ def test_model(sess, model, print_every = 50):
         actual_batch_size = len(data)
         batch_X = []
         for i in range(actual_batch_size):
-            sample = data.iloc[i,:]
-            array = one_hot_representation(sample,fields_dict,test_array_length)
+            sample = data.iloc[i, :]
+            array = one_hot_representation(sample, fields_dict, test_array_length)
             batch_X.append(array)
 
         batch_X = np.array(batch_X)
 
         # create a feed dictionary for this batch
-        feed_dict = {model.X: batch_X, model.keep_prob:1}
+        feed_dict = {model.X: batch_X, model.keep_prob: 1}
         # shape of [None,2]
         y_out_prob = sess.run([model.y_out_prob], feed_dict=feed_dict)
         # write to csv files
-        data['click'] = y_out_prob[0][:,-1]
+        data['click'] = y_out_prob[0][:, -1]
         if test_step == 1:
-            data[['id','click']].to_csv('FM_FTRL_v1.csv', mode='a', index=False, header=True)
+            data[['id', 'click']].to_csv('FM_FTRL_v1.csv', mode='a', index=False, header=True)
         else:
-            data[['id','click']].to_csv('FM_FTRL_v1.csv', mode='a', index=False, header=False)
+            data[['id', 'click']].to_csv('FM_FTRL_v1.csv', mode='a', index=False, header=False)
 
         test_step += 1
         if test_step % 50 == 0:
@@ -186,17 +189,17 @@ def test_model(sess, model, print_every = 50):
 if __name__ == '__main__':
     '''launching TensorBoard: tensorboard --logdir=path/to/log-directory'''
     # seting fields
-    fields= ['hour', 'C1', 'C14', 'C15', 'C16', 'C17', 'C18', 'C19', 'C20', 'C21',
-                    'banner_pos', 'site_id' ,'site_domain', 'site_category', 'app_domain',
-                    'app_id', 'app_category', 'device_model', 'device_type', 'device_id',
-                    'device_conn_type','click']
+    fields = ['hour', 'C1', 'C14', 'C15', 'C16', 'C17', 'C18', 'C19', 'C20', 'C21',
+              'banner_pos', 'site_id', 'site_domain', 'site_category', 'app_domain',
+              'app_id', 'app_category', 'device_model', 'device_type', 'device_id',
+              'device_conn_type', 'click']
     # loading dicts
     fields_dict = {}
     for field in fields:
-        with open('dicts/'+field+'.pkl','rb') as f:
+        with open('dicts/' + field + '.pkl', 'rb') as f:
             fields_dict[field] = pickle.load(f)
     # loading feature2field dict
-    with open('feature2field.pkl','rb') as f:
+    with open('feature2field.pkl', 'rb') as f:
         feature2field = pickle.load(f)
     # length of representation
     train_array_length = max(fields_dict['click'].values()) + 1

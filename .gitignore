@@ -7,3 +7,6 @@
 /future2field
 /sets
 
+*.gz
+avazu-ctr-prediction/test
+avazu-ctr-prediction/train

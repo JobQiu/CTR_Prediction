@@ -1,37 +1,43 @@
 # coding:utf-8
 import os
 import sys
+
 curPath = os.path.abspath(os.path.dirname(__file__))
 rootPath = os.path.split(curPath)[0]
 sys.path.append(rootPath)
 import tensorflow as tf
 from FM.utilities import *
 import logging
-logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s',level=logging.INFO)
+
+logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 import numpy as np
 import argparse
+
 
 class FM(object):
     """
     Factorization Machine with FTRL optimization
     """
+
     def __init__(self, config):
         """
         :param config: configuration of hyperparameters
         type of dict
         """
         # number of latent factors
-        self.k = config['k']
+        self.k = config['k']  # the size of latent vector
         self.lr = config['lr']
         self.batch_size = config['batch_size']
         self.reg_l1 = config['reg_l1']
-        self.reg_l2 = config['reg_l2']
+        self.reg_l2 = config['reg_l2']  # why don't we use l1 and l2 in the same time, is that just l2?
         # num of features
         self.p = feature_length
 
     def add_placeholders(self):
-        self.X = tf.sparse_placeholder('float32', [None, self.p])
-        self.y = tf.placeholder('int64', [None,])
+        self.X = tf.sparse_placeholder('float32',
+                                       shape=[None, self.p])
+        self.y = tf.placeholder('int64',
+                                shape=[None, ])
         self.keep_prob = tf.placeholder('float32')
 
     def inference(self):
@@ -40,12 +46,14 @@ class FM(object):
         :return: labels for each sample
         """
         with tf.variable_scope('linear_layer'):
-            b = tf.get_variable('bias', shape=[2],
+            b = tf.get_variable('bias',
+                                shape=[2],
                                 initializer=tf.zeros_initializer())
-            w1 = tf.get_variable('w1', shape=[self.p, 2],
-                                 initializer=tf.truncated_normal_initializer(mean=0,stddev=1e-2))
+            w1 = tf.get_variable('w1',
+                                 shape=[self.p, 2],
+                                 initializer=tf.truncated_normal_initializer(mean=0, stddev=1e-2))
             # shape of [None, 2]
-            self.linear_terms = tf.add(tf.sparse_tensor_dense_matmul  (self.X, w1), b)
+            self.linear_terms = tf.add(tf.sparse_tensor_dense_matmul(self.X, w1), b)
 
         with tf.variable_scope('interaction_layer'):
             v = tf.get_variable('v', shape=[self.p, self.k],
@@ -69,7 +77,7 @@ class FM(object):
 
     def add_accuracy(self):
         # accuracy
-        self.correct_prediction = tf.equal(tf.cast(tf.argmax(model.y_out,1), tf.int64), model.y)
+        self.correct_prediction = tf.equal(tf.cast(tf.argmax(model.y_out, 1), tf.int64), model.y)
         self.accuracy = tf.reduce_mean(tf.cast(self.correct_prediction, tf.float32))
         # add summary to accuracy
         tf.summary.scalar('accuracy', self.accuracy)
@@ -78,7 +86,8 @@ class FM(object):
         # Applies exponential decay to learning rate
         self.global_step = tf.Variable(0, trainable=False)
         # define optimizer
-        optimizer = tf.train.FtrlOptimizer(self.lr, l1_regularization_strength=self.reg_l1,
+        optimizer = tf.train.FtrlOptimizer(self.lr,
+                                           l1_regularization_strength=self.reg_l1,
                                            l2_regularization_strength=self.reg_l2)
         extra_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(extra_update_ops):
@@ -92,6 +101,7 @@ class FM(object):
         self.add_accuracy()
         self.train()
 
+
 def check_restore_parameters(sess, saver):
     """ Restore the previously trained parameters if there are any. """
     ckpt = tf.train.get_checkpoint_state("checkpoints")
@@ -100,6 +110,7 @@ def check_restore_parameters(sess, saver):
         saver.restore(sess, ckpt.model_checkpoint_path)
     else:
         logging.info("Initializing fresh parameters for the my Factorization Machine")
+
 
 def train_model(sess, model, epochs=10, print_every=50):
     """training model"""
@@ -126,14 +137,13 @@ def train_model(sess, model, epochs=10, print_every=50):
             # create a feed dictionary for this batch
             feed_dict = {model.X: (batch_indexes, batch_values, batch_shape),
                          model.y: batch_y,
-                         model.keep_prob:1.0}
+                         model.keep_prob: 1.0}
 
-
-            loss, accuracy,  summary, global_step, _ = sess.run([model.loss, model.accuracy,
-                                                                 merged,model.global_step,
-                                                                 model.train_op], feed_dict=feed_dict)
+            loss, accuracy, summary, global_step, _ = sess.run([model.loss, model.accuracy,
+                                                                merged, model.global_step,
+                                                                model.train_op], feed_dict=feed_dict)
             # aggregate performance stats
-            losses.append(loss*actual_batch_size)
+            losses.append(loss * actual_batch_size)
             num_samples += actual_batch_size
             # Record summaries and train.csv-set accuracy
             train_writer.add_summary(summary, global_step=global_step)
@@ -143,10 +153,11 @@ def train_model(sess, model, epochs=10, print_every=50):
                              .format(global_step, loss, accuracy))
                 saver.save(sess, "checkpoints/model", global_step=global_step)
         # print loss of one epoch
-        total_loss = np.sum(losses)/num_samples
-        print("Epoch {1}, Overall loss = {0:.3g}".format(total_loss, e+1))
+        total_loss = np.sum(losses) / num_samples
+        print("Epoch {1}, Overall loss = {0:.3g}".format(total_loss, e + 1))
 
-def test_model(sess, model, print_every = 50):
+
+def test_model(sess, model, print_every=50):
     """training model"""
     # get testing data, iterable
     with open('../avazu_CTR/test_sparse_data_frac_0.01.pkl', 'rb') as f:
@@ -165,10 +176,10 @@ def test_model(sess, model, print_every = 50):
         batch_values = np.ones(len(batch_indexes), dtype=np.float32)
         # create a feed dictionary for this15162 batch
         feed_dict = {model.X: (batch_indexes, batch_values, batch_shape),
-                     model.keep_prob:1}
+                     model.keep_prob: 1}
         # shape of [None,2]
         y_out_prob = sess.run([model.y_out_prob], feed_dict=feed_dict)
-        batch_clicks = y_out_prob[0][:,-1]
+        batch_clicks = y_out_prob[0][:, -1]
 
         all_ids.extend(batch_ids)
         all_clicks.extend(batch_clicks)
@@ -177,7 +188,8 @@ def test_model(sess, model, print_every = 50):
         if ibatch % print_every == 0:
             logging.info("Iteration {0} has finished".format(ibatch))
 
-    pd.DataFrame(np.array([all_ids, all_clicks]).T, columns=['id','click']).to_csv('result_regl1_.csv', index=False)
+    pd.DataFrame(np.array([all_ids, all_clicks]).T, columns=['id', 'click']).to_csv('result_regl1_.csv', index=False)
+
 
 if __name__ == '__main__':
     '''launching TensorBoard: tensorboard --logdir=path/to/log-directory'''
@@ -188,13 +200,13 @@ if __name__ == '__main__':
     mode = args.mode
     # original fields
     fields = ['hour', 'C1', 'C14', 'C15', 'C16', 'C17', 'C18', 'C19', 'C20', 'C21',
-                    'banner_pos', 'site_id' ,'site_domain', 'site_category', 'app_domain',
-                    'app_id', 'app_category', 'device_model', 'device_type', 'device_id',
-                    'device_conn_type','click']
+              'banner_pos', 'site_id', 'site_domain', 'site_category', 'app_domain',
+              'app_id', 'app_category', 'device_model', 'device_type', 'device_id',
+              'device_conn_type', 'click']
     # loading dicts
     fields_dict = {}
     for field in fields:
-        with open('dicts/'+field+'.pkl','rb') as f:
+        with open('dicts/' + field + '.pkl', 'rb') as f:
             fields_dict[field] = pickle.load(f)
     # length of representation
     train_array_length = max(fields_dict['click'].values()) + 1
